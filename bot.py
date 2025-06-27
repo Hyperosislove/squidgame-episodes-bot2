@@ -2,13 +2,14 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 import logging
 
-# Bot Token
+# Bot token and channel
 TOKEN = "8043507297:AAGyWv9WwfR_qNvrgwioXUzgdYTdz9A1XDo"
-
-# Your Channel Username (without @)
 CHANNEL_USERNAME = "squidgame3allepisodes"
 
-# Squid Game Episode Links
+# List of users who already clicked "I've Joined"
+joined_users = set()
+
+# Episode links
 episode_links = {
     "🎬 Episode 1": "https://worker-holy-term-114f.xijofa2769.workers.dev/...",
     "🎬 Episode 2": "https://worker-weathered-king-dfe2.pexovav401.workers.dev/...",
@@ -18,82 +19,57 @@ episode_links = {
     "🎬 Episode 6": "https://worker-frosty-bread-8050.moloyok562.workers.dev/..."
 }
 
-# Logging (for Heroku logs)
 logging.basicConfig(level=logging.INFO)
 
-# Function to check if user is subscribed
-async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    try:
-        member = await context.bot.get_chat_member(chat_id=f"@{CHANNEL_USERNAME}", user_id=user_id)
-        return member.status in ["member", "creator", "administrator"]
-    except:
-        return False
+# Show episode buttons
+async def send_episode_buttons(chat_id, context):
+    keyboard = [[InlineKeyboardButton(ep, url=link)] for ep, link in episode_links.items()]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text="**✅ Access Granted!**\n\nChoose an episode below and enjoy the show 🍿:\n\n📺 _Streaming in 4K Dolby Vision_ 🔊",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
 
 # /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat_id = user.id
 
-    if not await check_subscription(chat_id, context):
-        keyboard = [
-            [InlineKeyboardButton("📢 Join Now", url=f"https://t.me/{CHANNEL_USERNAME}")],
-            [InlineKeyboardButton("✅ I've Joined", callback_data="joined")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            f"""👋 **Welcome, {user.first_name}!**
-
-🔥 You're just one step away from watching **Squid Game Season 3** in stunning **4K Ultra HD** quality with **Hindi + English + Korean audio**.  
-👉 To unlock all episodes, please join our official channel first:
-
-🔒 **This helps us keep the content free for everyone!**
-
-👇 Click below to join and then tap “I’ve Joined”
-""",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
+    if chat_id in joined_users:
+        await send_episode_buttons(chat_id, context)
         return
 
-    await send_episode_buttons(update, context)
-
-# Send Episode Buttons
-async def send_episode_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton(ep, url=link)] for ep, link in episode_links.items()]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
+    keyboard = [
+        [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
+        [InlineKeyboardButton("✅ I’ve Joined", callback_data="joined")]
+    ]
     await update.message.reply_text(
-        "**✅ Access Granted!**\n\nChoose an episode below and enjoy the show 🍿:\n\n📺 _Streaming in 4K Dolby Vision_ 🔊",
-        reply_markup=reply_markup,
+        f"""👋 **Welcome, {user.first_name}!**
+
+🔥 You're just one step away from watching **Squid Game Season 3** in 4K Ultra HD with Hindi, English & Korean audio.
+
+Please join the channel to unlock all episodes 🔓
+
+👇 Tap below to join, then press “I’ve Joined”
+""",
+        reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
 
-# Callback from "I’ve Joined"
+# Button callback
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     user_id = query.from_user.id
 
-    if not await check_subscription(user_id, context):
-        await query.edit_message_text(
-            "❌ You haven't joined the channel yet.\n\nPlease join first to unlock the episodes:\n👉 https://t.me/" + CHANNEL_USERNAME
-        )
-        return
+    if query.data == "joined":
+        joined_users.add(user_id)
+        await query.edit_message_text("✅ Access Granted! Please select an episode below.")
+        await send_episode_buttons(user_id, context)
 
-    # User joined successfully
-    keyboard = [[InlineKeyboardButton(ep, url=link)] for ep, link in episode_links.items()]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await query.edit_message_text(
-        "**✅ Access Granted!**\n\nChoose an episode below and enjoy the show 🍿:\n\n📺 _Streaming in 4K Dolby Vision_ 🔊",
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
-    )
-
-# Initialize App
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CallbackQueryHandler(button_callback))
 
-# Run
 app.run_polling()
